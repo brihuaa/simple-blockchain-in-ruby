@@ -1,89 +1,130 @@
-###########################
-#	Improved version of "Build your own blockchain from scratch in 20 lines of Ruby!"	
-#		from https://github.com/openblockchains/awesome-blockchains/tree/master/blockchain.rb
-#  
-#   and inspired by
-#     Let's Build the Tiniest Blockchain In Less Than 50 Lines of Python by Gerald Nash
-#     see https://medium.com/crypto-currently/lets-build-the-tiniest-blockchain-e70965a248b
-#
-#	Now, Blockchain with prompt transactions, transactions counter for each block, 
-#											 ledger, proof of work and dynamic variable name. 
-#
-#	This Blockchain can be set as a loop for infinite using of the Blockchain.
-#
-#
-#  to run use:
-#    $ ruby ./blockchain.rb
-#
-#
-#
+require 'digest'                # Para SHA256
+require 'pp'                    # Para pretty printing
+# require 'pry'                 # Para debugging en el momento
+require_relative 'block'        # Clase Block
+require_relative 'transaction'  # Métodos para transacciones
 
-require 'digest'    							# For hash checksum digest function SHA256
-require 'pp'        							# For pp => pretty printer
-# require 'pry'                     # For on the fly debugging
-require_relative 'block'					# class Block
-require_relative 'transaction'		# method Transactions
+# Clase que representa un bloque en la blockchain.
+class Block
+  attr_reader :index, :timestamp, :transactions, :transactions_count, :previous_hash, :nonce, :hash, :creator
 
+  # Inicializa un nuevo bloque.
+  # @param index [Integer] el índice del bloque.
+  # @param transactions [Array] transacciones incluidas en el bloque.
+  # @param previous_hash [String] hash del bloque anterior.
+  # @param creator [String] creador del bloque.
+  def initialize(index, transactions, previous_hash, creator)
+    @index              = index
+    @timestamp          = Time.now
+    @transactions       = transactions
+    @transactions_count = transactions.size
+    @previous_hash      = previous_hash
+    @creator            = creator
+    @nonce, @hash       = compute_hash_with_proof_of_work
+  end
+
+  # Busca un hash válido siguiendo las reglas de Proof of Work (PoW).
+  # Por defecto, el hash debe iniciar con "00". Para aumentar la dificultad,
+  # puedes modificar este parámetro (por ejemplo, usar "0000").
+  #
+  # @param difficulty [String] la cadena que debe iniciar el hash.
+  # @return [Array] con el nonce y el hash válido.
+  def compute_hash_with_proof_of_work(difficulty = "00")
+    nonce = 0
+    loop do 
+      hash = calc_hash_with_nonce(nonce)
+      return [nonce, hash] if hash.start_with?(difficulty)
+      nonce += 1
+    end
+  end
+
+  # Calcula el hash del bloque usando el nonce proporcionado.
+  # @param nonce [Integer] valor usado para la minería.
+  # @return [String] hash resultante.
+  def calc_hash_with_nonce(nonce = 0)
+    sha = Digest::SHA256.new
+    sha.update(nonce.to_s +
+               @index.to_s +
+               @timestamp.to_s +
+               @transactions.to_s +
+               @transactions_count.to_s +
+               @previous_hash)
+    sha.hexdigest
+  end
+
+  # Crea el bloque génesis (el primer bloque de la cadena).
+  # @param transactions [Array] transacciones iniciales.
+  # @return [Block] el bloque génesis.
+  def self.first(*transactions)
+    Block.new(0, transactions, "0", "Elam")
+  end
+
+  # Crea el siguiente bloque en la cadena.
+  # @param previous [Block] el bloque anterior.
+  # @param transactions [Array] transacciones para el nuevo bloque.
+  # @param creator [String] (opcional) creador del bloque, por defecto "Unknown".
+  # @return [Block] el nuevo bloque.
+  def self.next(previous, transactions, creator = "Unknown")
+    Block.new(previous.index + 1, transactions, previous.hash, creator)
+  end
+end
+
+# Array para almacenar la cadena de bloques.
 LEDGER = []
 
-#####
-## Blockchain building, one block at a time.
-##  This will create a first block with fake transactions
-## 	and then prompt user for transactions informations and set it in a new block.
-## 	
-## Each block can take multiple transaction
-## 	when a user has finish to add transaction, 
-##  the block is added to the blockchain and writen in the ledger
-
-
-def create_first_block
-	i = 0
-	instance_variable_set( "@b#{i}", 
-												 Block.first( 
-													{ from: "Dutchgrown", to: "Vincent", what: "Tulip Bloemendaal Sunset", qty: 10 },
-													{ from: "Keukenhof", to: "Anne", what: "Tulip Semper Augustus", qty: 7 } )
-											 )
-	LEDGER << @b0
-	pp @b0
-	p "============================"
-	add_block
-end
-	
-	
-	
-def add_block
-	i = 1
-	loop do
-		instance_variable_set("@b#{i}", Block.next( (instance_variable_get("@b#{i-1}")), get_transactions_data))
-		LEDGER << instance_variable_get("@b#{i}")
-		p "============================"
-		pp instance_variable_get("@b#{i}")
-		p "============================"
-		i += 1
-	end
+# Crea y añade el bloque génesis a la cadena.
+def create_first_block(num_blocks)
+  genesis = Block.first(
+    { from: "Dutchgrown", to: "Vincent", what: "Tulip Bloemendaal Sunset", qty: 10 },
+    { from: "Keukenhof", to: "Anne", what: "Tulip Semper Augustus", qty: 7 }
+  )
+  LEDGER << genesis
+  pp genesis
+  puts "============================"
+  add_block(num_blocks)
 end
 
+# Añade nuevos bloques a la cadena.
+# @param num_blocks [Integer] número de bloques a añadir.
+def add_block(num_blocks)
+  i = 1
+  while i < num_blocks
+    # Se asume que get_transactions_data retorna un array con las transacciones para el nuevo bloque.
+    new_block = Block.next(LEDGER[i - 1], get_transactions_data)
+    LEDGER << new_block
+    puts "============================"
+    pp new_block
+    puts "============================"
+    i += 1
+  end
+end
+
+# Función para obtener datos de transacciones (dummy data para este ejemplo).
+def get_transactions_data
+  [
+    { from: "Alice", to: "Bob", what: "Bitcoin", qty: 1 },
+    { from: "Charlie", to: "Dave", what: "Ethereum", qty: 2 }
+  ]
+end
+
+# Función para iniciar la ejecución del blockchain.
 def launcher
-	puts "==========================="
-	puts ""
-	puts "Welcome to Simple Blockchain In Ruby !"
-	puts ""
-	sleep 1.5
-	puts "This program was created by Anthony Amar for and educationnal purpose"
-	puts ""
-	sleep 1.5
-	puts "Wait for the genesis (the first block of the blockchain)"
-	puts ""
-	for i in 1..10
-		print "."
-		sleep 0.5
-		break if i == 10
-	end
-	puts "" 
-	puts "" 
-	puts "==========================="
-	create_first_block
+  puts "==========================="
+  puts ""
+  puts "Welcome to Simple Blockchain In Ruby!"
+  puts ""
+  sleep 1.5
+  puts "This program was created by Anthony Amar for educational purposes"
+  puts ""
+  sleep 1.5
+  puts "Wait for the genesis (the first block of the blockchain)"
+  puts ""
+  10.times do
+    print "."
+    sleep 0.5
+  end
+  puts "\n\n==========================="
+  create_first_block(10)  # Añadir 10 bloques en total
 end
-
 
 launcher
